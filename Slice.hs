@@ -11,19 +11,15 @@ type Point = (Int, Int, Int)
 
 type Volume a = Map Point a
 
-data Slice a = Slice
-    { volume :: Volume a
-    , pos    :: Int
-    , size   :: Int
-    , axis   :: Axis
-    }
-
 data Axis = X | Y | Z
     deriving (Enum, Eq)
 
-data Cursor a = Cursor { screen :: Slice a, i, j :: Int }
+raytrace
+    :: (Axis, Bool)
+    -> Point
+    -> Volume a
+    -> (Maybe a, Int)
 
-raytrace :: (Axis, Bool) -> Point -> Volume a -> (Maybe a, Int)
 raytrace (ray, toLover) (x, y, z) volume =
     (value, length before)
   where
