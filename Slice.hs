@@ -7,7 +7,9 @@ import qualified Data.Map as Map
 
 import Data.Maybe
 
-type Point = (Int, Int, Int)
+type Point  = (Int, Int, Int)
+type Depth  =  Int
+type Bounds = (Int, Int, Int, Int)
 
 type Volume a = Map Point a
 
@@ -15,12 +17,13 @@ data Axis = X | Y | Z
     deriving (Enum, Eq)
 
 raytrace
-    :: (Axis, Bool)
-    -> Point
-    -> Volume a
-    -> (Maybe a, Int)
+    ::  Depth
+    -> (Axis, Bool)
+    ->  Point
+    ->  Volume a
+    -> (Maybe a, Depth)
 
-raytrace (ray, toLover) (x, y, z) volume =
+raytrace depth (ray, toLover) (x, y, z) volume =
     (value, length before)
   where
     value = do
@@ -30,9 +33,9 @@ raytrace (ray, toLover) (x, y, z) volume =
     (before, after) = break (`Map.member` volume) trace
 
     trace = case ray of
-        X -> [(i, y, z) | i <- [x, x + d.. x + d * 4]]
-        Y -> [(x, i, z) | i <- [y, y + d.. y + d * 4]]
-        Z -> [(x, y, i) | i <- [z, z + d.. z + d * 4]]
+        X -> [(i, y, z) | i <- [x, x + d.. x + d * (depth - 1)]]
+        Y -> [(x, i, z) | i <- [y, y + d.. y + d * (depth - 1)]]
+        Z -> [(x, y, i) | i <- [z, z + d.. z + d * (depth - 1)]]
 
     d | toLover   = -1
       | otherwise =  1
@@ -43,7 +46,7 @@ maybeHead []       = Nothing
 plane
     :: Axis
     -> Point
-    -> (Int, Int, Int, Int)
+    -> Bounds
     -> [[Point]]
 
 plane ray (x, y, z) (u, v, u1, v1) =
@@ -54,10 +57,10 @@ plane ray (x, y, z) (u, v, u1, v1) =
 
 project
     :: (Axis, Bool)
-    -> (Int, Int, Int, Int)
+    -> Bounds
     -> Point
     -> Volume a
-    -> ((Point, Maybe a, Int) -> String)
+    -> ((Point, Maybe a, Depth) -> String)
     -> [[String]]
 
 project ray@(axis, _) bounds origin volume drawer =
@@ -65,7 +68,7 @@ project ray@(axis, _) bounds origin volume drawer =
   where
     ls = flip map surface $ map $ \point ->
         let
-            (shape, depth) = raytrace ray point volume
+            (shape, depth) = raytrace 5 ray point volume
         in
             drawer (point, shape, depth)
 
@@ -124,6 +127,21 @@ fromPlanes planes @ (plane @ (line : _) : _) =
 code  x y = "\x1b[" ++ show x ++ ";" ++ show y ++ "m"
 code' x   = "\x1b[" ++ show x ++ "m"
 
+interact' point@(x, y, z) volume = do
+    view point 5 volume
+    c <- getChar
+    print point
+    case c of
+        'a' -> interact' (x + 1, y, z) volume
+        'd' -> interact' (x - 1, y, z) volume
+        'w' -> interact' (x, y + 1, z) volume
+        's' -> interact' (x, y - 1, z) volume
+        'q' -> interact' (x, y, z + 1) volume
+        'z' -> interact' (x, y, z - 1) volume
+        '\ESC' -> return ()
+        ' ' -> interact' point (Map.delete point     volume)
+        c   -> interact' point (Map.insert point [c] volume)
+
 testMap :: Volume String
 testMap = fromPlanes
     [ [ "     "
@@ -148,4 +166,4 @@ testMap = fromPlanes
       ]
     ]
 
-main = view (0, 0, 0) 5 testMap
+main = interact' (0, 0, 0) testMap
