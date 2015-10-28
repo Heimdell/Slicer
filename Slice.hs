@@ -1,4 +1,4 @@
-module Slice where
+--module Slice where
 
 import Control.Monad (when, forM_, guard)
 
@@ -6,6 +6,8 @@ import Data.Map (Map, (!))
 import qualified Data.Map as Map
 
 import Data.Maybe
+
+import System.IO
 
 type Point  = (Int, Int, Int)
 type Depth  =  Int
@@ -166,4 +168,6 @@ testMap = fromPlanes
       ]
     ]
 
-main = interact' (0, 0, 0) testMap
+main = do
+    stdin `hSetBuffering` NoBuffering
+    interact' (0, 0, 0) testMap
