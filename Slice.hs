@@ -90,10 +90,20 @@ stdDrawer' (x, depth) =
     mapping 1 = (37, 0)
     mapping 0 = (37, 1)
 
-view point bounds volume =
+view point edge volume =
     dump (zipWith (++) (pr X) (pr Y) ++ (pr Z))
   where
-    pr axis = project (axis, True) bounds point volume (stdDrawer point)
+    pr axis = project
+        (axis, True)
+        (boundsFrom axis point edge)
+         point
+         volume
+        (stdDrawer point)
+
+boundsFrom axis (x, y, z) d = case axis of
+    X -> (y - d, z - d, y + d, z + d)
+    Y -> (x - d, z - d, x + d, z + d)
+    Z -> (x - d, y - d, x + d, y + d)
 
 fromPlanes planes @ (plane @ (line : _) : _) =
     Map.fromList $ do
@@ -138,4 +148,4 @@ testMap = fromPlanes
       ]
     ]
 
-main = view (0, 0, 0) (-5, -5, 5, 5) testMap
+main = view (0, 0, 0) 5 testMap
