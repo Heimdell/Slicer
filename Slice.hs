@@ -170,4 +170,5 @@ testMap = fromPlanes
 
 main = do
     stdin `hSetBuffering` NoBuffering
+    stdin `hSetEcho`      False
     interact' (0, 0, 0) testMap
