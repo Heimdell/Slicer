@@ -1,13 +1,16 @@
 
-{-# LANGUAGE TemplateHaskell, RankNTypes, DeriveFunctor #-}
+{-# LANGUAGE TemplateHaskell, RankNTypes, DeriveFunctor, FlexibleContexts #-}
 
 import Control.Arrow
 import Control.Lens
+import Control.Monad.State
 
 import Data.Map (Map, (!))
 import qualified Data.Map as Map
 
 import Data.Maybe
+
+import System.IO
 
 data Point = Point { _x, _y, _z :: Int }
     deriving (Eq, Ord, Show)
@@ -25,15 +28,20 @@ type Volume a = Map Point a
 data Axis = X | Y | Z
     deriving (Enum, Eq)
 
-data View a = View { _point :: Point, _volume :: Volume a, _bounds :: Bounds }
+data View a = View 
+    { _point  :: Point
+    , _volume :: Volume a
+    , _bounds :: Bounds 
+    }
     deriving (Show)
 
-data Scan a = Scan { places :: Map Place a }
+newtype Scan a = Scan { _places :: Map Place a }
     deriving (Show, Functor)
 
 makeLenses ''Point
 makeLenses ''Bounds
 makeLenses ''View
+makeLenses ''Scan
 
 focus :: Lens' (View a) (Maybe a)
 focus act view =
@@ -44,18 +52,17 @@ focus act view =
 every :: Functor f => f a -> (a -> b) -> f b
 every = flip fmap
 
-raytrace (axis, inc) depth view =
-    surface `every` (zbuffer depth . trace inc axis)
+--raytrace :: (Axis, Int) -> Int -> View a -> Scan (Int, Maybe a)
+raytrace (axis, delta) depth view =
+    surface `every` (zbuffer . take depth . trace delta axis)
   where
-    surface = plane axis view
-    trace inc axis =
-        iterate (along axis %~ (+ inc))
-
-    zbuffer depth = count . break isJust . map (\pt -> view^?volume.ix pt) . take depth
-    count (empties, rest) =
+    surface          = plane axis view
+    trace delta axis = iterate (along axis %~ (+ delta))
+    zbuffer          = count . break isJust . map (\pt -> view^?volume.ix pt)
+    count (empties, rest) = 
         (length empties, maybeFirst rest)
 
-maybeFirst list = list^._Cons._1
+    maybeFirst list  = list^?_Cons._1._Just
 
 plane :: Axis -> View a -> Scan Point
 plane axis view =
@@ -97,5 +104,77 @@ pair first second = lens get put
         & first  `set` a
         & second `set` b
 
-view1 :: View String
-view1 = View (Point 0 0 0) (Map.empty) (radial 1)
+emptyView :: View String
+emptyView = View (Point 0 0 0) (Map.empty) (radial 5)
+
+data Interaction a = Interaction { _ray :: (Axis, Int), _viewport :: View a }
+
+makeLenses ''Interaction
+
+type Interact a = StateT (Interaction a) IO
+
+runInteraction interaction = do
+    interaction `evalStateT` Interaction { _ray = (Z, 1), _viewport = emptyView }
+
+interact' :: Interact String ()
+interact' = do
+    lift $ do
+        putStrLn ""
+        putStrLn "wsad + qz, space cleans, other sets"
+        putStrLn "----"
+    
+    draw
+    c <- lift getChar
+    
+    case c of
+        'w' -> viewport.point.x -= 1
+        's' -> viewport.point.x += 1
+        'a' -> viewport.point.y -= 1
+        'd' -> viewport.point.y += 1
+        'z' -> viewport.point.z += 1
+        'q' -> viewport.point.z -= 1
+        ' ' -> viewport.focus   .= Nothing
+        c   -> viewport.focus   .= Just [c]
+
+    when (c /= '\ESC')
+        interact'
+
+draw :: Interact String ()
+draw = do
+    (vol, ray)       <- use (pair viewport ray)
+    Bounds u v u1 v1 <- use (viewport.bounds)
+    
+    let trace = raytrace ray 5 vol
+
+    forM [u.. u1] $ \x -> do
+        forM [v.. v1] $ \y -> do
+            let Just (depth, thing) = Place x y `Map.lookup` (trace^.places)
+
+            lift $ putStr $ drawPoint (x, y) depth (fromMaybe "." thing)
+        
+        lift $ putStrLn ""
+
+    return ()
+
+drawPoint :: (Int, Int) -> Int -> String -> String
+drawPoint (0, 0) depth cell =
+    code' 7 ++ drawPoint (1, 1) depth cell ++ code' 0
+
+drawPoint (x, y) depth cell =
+    uncurry code (mapping depth) ++ cell ++ code' 0
+  where
+    mapping 5 = (30, 2)
+    mapping 4 = (30, 1)
+    mapping 3 = (30, 1)
+    mapping 2 = (37, 2)
+    mapping 1 = (37, 0)
+    mapping 0 = (37, 1)
+
+code  x y = "\x1b[" ++ show x ++ ";" ++ show y ++ "m"
+code' x   = "\x1b[" ++ show x ++ "m"
+
+main = do
+    stdin `hSetBuffering` NoBuffering
+    stdin `hSetEcho`      False
+    
+    runInteraction interact'
