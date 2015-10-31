@@ -79,21 +79,30 @@ project ray@(axis, _) bounds origin volume drawer =
 dump :: [[String]] -> IO ()
 dump = mapM_ (putStrLn . concat)
 
-stdDrawer pt (pt1, x, depth)
+invertedFocus drawer pt (pt1, x, depth)
     | pt == pt1
-        = code' 7 ++ stdDrawer' (x, depth) ++ code' 0
+        = code' 7 ++ drawer (x, depth) ++ code' 0
     | otherwise
-        = stdDrawer' (x, depth)
+        = drawer (x, depth)
 
-stdDrawer' (x, depth) =
+stdDrawer (x, depth) =
     uncurry code (mapping depth) ++ fromMaybe "." x ++ code 0 0
   where
     mapping 5 = (30, 2)
-    mapping 4 = (37, 2)
-    mapping 3 = (32, 2)
-    mapping 2 = (32, 1)
-    mapping 1 = (37, 0)
-    mapping 0 = (37, 1)
+    mapping 4 = (30, 1)
+    mapping 3 = (30, 1)
+    mapping 2 = (37, 2)
+    mapping 1 = (37, 1)
+    mapping 0 = (37, 0)
+
+boxyDrawer (Just x, depth) = case depth of
+    0 -> x
+    3 -> "░"
+    2 -> "▒"
+    1 -> "▓"
+    _ -> "."
+
+boxyDrawer (Nothing, _) = "."
 
 view point edge volume =
     dump (zipWith (++) (pr X) (pr Y) ++ (pr Z))
@@ -103,7 +112,7 @@ view point edge volume =
         (boundsFrom axis point edge)
          point
          volume
-        (stdDrawer point)
+        (invertedFocus stdDrawer point)
 
 boundsFrom axis (x, y, z) d = case axis of
     X -> (y - d, z - d, y + d, z + d)
@@ -171,4 +180,4 @@ testMap = fromPlanes
 main = do
     stdin `hSetBuffering` NoBuffering
     stdin `hSetEcho`      False
-    interact' (0, 0, 0) testMap
+    interact' (0, 0, 0) Map.empty
